@@ -57,7 +57,7 @@ variable "image_digest" {
 
 variable "image_repository" {
   type        = string
-  default     = "docker.n8n.io/n8nio/n8n"
+  default     = "ghcr.io/n8n-io/n8n"
   description = "Where to pull n8n's image from. \"ghcr.io/n8n-io/n8n\" serves the same image, by the same digest, without Docker Hub's pull limits."
 
   validation {

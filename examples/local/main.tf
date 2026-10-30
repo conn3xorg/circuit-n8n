@@ -15,7 +15,7 @@ variable "owner_password" {
 # "ghcr.io/n8n-io/n8n" if you hit the limit.
 variable "image_repository" {
   type    = string
-  default = "docker.n8n.io/n8nio/n8n"
+  default = "ghcr.io/n8n-io/n8n"
 }
 
 module "n8n" {

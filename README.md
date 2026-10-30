@@ -129,7 +129,7 @@ n8n ships as a Docker image and as an npm package. This circuit uses the image:
 - **One pin, checked.** `n8n_version` and `image_digest` go into the unit together, and Podman pulls by the digest, so a tag that's re-pushed upstream can't change what your hosts run.
 - **Upgrades are a diff.** Change both inputs and `conn3x plan` shows the new image in the unit file. The apply restarts n8n on it, and n8n migrates its database as it starts.
 
-n8n publishes the image to Docker Hub, served as `docker.n8n.io/n8nio/n8n`, and to GitHub's registry as `ghcr.io/n8n-io/n8n`. Both carry the same digest. Docker Hub limits how often you can pull without an account, which you can hit from a shared address; set `image_repository = "ghcr.io/n8n-io/n8n"` if you do.
+n8n publishes the image to GitHub's registry as `ghcr.io/n8n-io/n8n` and to Docker Hub as `docker.n8n.io/n8nio/n8n`, with the same digest on both. The circuit pulls from GitHub's registry: Docker Hub limits pulls without an account, and that limit stopped test droplets cold. Set `image_repository = "docker.n8n.io/n8nio/n8n"` if you'd rather pull from Docker Hub.
 
 The container uses the host's network rather than a published port, so it reaches a PostgreSQL that listens only on localhost, which is how circuit-postgres starts out, and `listen_address` is a real address on the host.
 
@@ -140,7 +140,7 @@ On each host, in order:
 1. Creates `/etc/n8n`, mode `0700`, owned by root.
 2. If `/etc/n8n/keys.env` doesn't exist, writes it, mode `0600`, with `N8N_ENCRYPTION_KEY`: 24 random bytes from `/dev/urandom` in base64, the same form n8n makes for itself. Once the file exists the circuit never touches it again, so the key can't change under a running instance.
 3. Creates `/var/lib/n8n`, mode `0700`, for the SQLite database, n8n's own config and its event log.
-4. Through [circuit-podman](https://github.com/conn3xorg/circuit-podman) v0.1.0, installs Podman and runs `docker.n8n.io/n8nio/n8n:VERSION@DIGEST` as `n8n.service`: a Quadlet unit on the host network that reads `keys.env`, mounts `/var/lib/n8n` as `/home/node/.n8n`, and carries the settings below. `postgres_password` and `environment` go to `/etc/containers/env/n8n.env`, mode `0600`, written from ephemeral values so they never reach the plan or state.
+4. Through [circuit-podman](https://github.com/conn3xorg/circuit-podman) v0.1.0, installs Podman and runs `ghcr.io/n8n-io/n8n:VERSION@DIGEST` as `n8n.service`: a Quadlet unit on the host network that reads `keys.env`, mounts `/var/lib/n8n` as `/home/node/.n8n`, and carries the settings below. `postgres_password` and `environment` go to `/etc/containers/env/n8n.env`, mode `0600`, written from ephemeral values so they never reach the plan or state.
 5. Waits up to 15 minutes for n8n to open its port. On a first start it pulls the image, which is about 280 MB compressed, and sets up its database before it listens.
 6. With `owner`, writes the password and a small setup script to `/etc/n8n`, both `0600`, and creates the owner as described above.
 
@@ -194,7 +194,7 @@ Find the key in the old instance's `N8N_ENCRYPTION_KEY`, or in the `encryptionKe
 | `executions_max_age` | number | `336` | Hours to keep finished executions before pruning deletes them. Sets `EXECUTIONS_DATA_MAX_AGE`. |
 | `n8n_version` | string | `"2.45.6"` | Tag of n8n's image. Change `image_digest` with it. |
 | `image_digest` | string | `"sha256:45edf896..."` | Digest of the image for `n8n_version`. Podman pulls by the digest. Find it on [Docker Hub](https://hub.docker.com/r/n8nio/n8n/tags) or with `skopeo inspect docker://docker.n8n.io/n8nio/n8n:TAG`. |
-| `image_repository` | string | `"docker.n8n.io/n8nio/n8n"` | Where to pull the image from. `"ghcr.io/n8n-io/n8n"` serves the same digests. |
+| `image_repository` | string | `"ghcr.io/n8n-io/n8n"` | Where to pull the image from. `"docker.n8n.io/n8nio/n8n"` (Docker Hub) serves the same digests. |
 | `listen_address` | string | `"127.0.0.1"` | Address n8n listens on. `"0.0.0.0"` listens on every address. |
 | `port` | number | `5678` | Port n8n listens on. |
 | `proxy_hops` | number | `1` | How many reverse proxies stand in front of n8n. Sets `N8N_PROXY_HOPS`. `0` when people reach n8n directly. |
