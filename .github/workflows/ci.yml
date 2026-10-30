@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Conn3x
+        env: &gh
+          GH_TOKEN: ${{ github.token }}
+        run: &install |
+          tag=$(gh release view -R conn3xorg/conn3x --json tagName -q .tagName)
+          file="conn3x_${tag#v}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/$file"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/checksums.txt"
+          grep " $file\$" checksums.txt | sha256sum -c -
+          mkdir -p bin && tar -xzf "$file" -C bin conn3x
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: conn3x version
+      - run: conn3x fmt -check -recursive
+      - name: Validate
+        run: conn3x init -backend=false && conn3x validate
+      - name: Validate the example
+        working-directory: examples/local
+        run: conn3x init -backend=false && conn3x validate
+
+  e2e:
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [rocky10, fedora45, ubuntu2404, debian13]
+    name: e2e (${{ matrix.distro }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The test host images live in the Conn3x repo.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: conn3xorg/conn3x
+          ref: main
+          path: conn3x
+          persist-credentials: false
+          sparse-checkout: test/images
+      - name: Install Conn3x
+        env: *gh
+        run: *install
+      - name: Start the ${{ matrix.distro }} host
+        working-directory: examples/local
+        env:
+          CONTAINERFILE: ${{ github.workspace }}/conn3x/test/images/${{ matrix.distro }}/Containerfile
+          # Podman in the host container needs a rootful, privileged container.
+          PODMAN: sudo podman
+        run: ./up.sh
+      # GitHub's runners share Docker Hub's anonymous pull limit, so CI pulls
+      # the same image, by the same digest, from GitHub's registry.
+      - name: Apply, then plan again with no changes
+        working-directory: examples/local
+        env:
+          TF_VAR_image_repository: ghcr.io/n8n-io/n8n
+        run: |
+          conn3x init
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
+      # /healthz answers, the owner the apply created can log in and a wrong
+      # password can't, and a workflow imported with the n8n CLI answers on
+      # its webhook once published. n8n loads published workflows as it
+      # starts, so the restart also shows the database and the owner live on
+      # the host. Some test hosts have no curl, so the checks run with Node
+      # in the n8n container, which shares the host's network.
+      - name: Log in, import a workflow, restart, call its webhook
+        run: |
+          sudo podman exec -i circuit-n8n sh -eu <<'EOF'
+          cat > /tmp/ci.mjs <<'JS'
+          const u = "http://127.0.0.1:5678";
+          const what = process.argv[2];
+          const ok = (c, m) => { if (!c) { console.error("FAIL: " + m); process.exit(1); } };
+          const login = (password) => fetch(u + "/rest/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ emailOrLdapLoginId: "owner@example.com", password }) });
+          if (what === "wait") {
+            // /healthz answers before the API does; until then /rest gets the editor's HTML.
+            for (let i = 0; i < 300; i++) {
+              try {
+                if ((await (await fetch(u + "/healthz")).json()).status === "ok" && (await (await fetch(u + "/rest/settings")).json()).data) process.exit(0);
+              } catch {}
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+            ok(false, "n8n didn't come up");
+          }
+          if (what === "login") {
+            const s = await (await fetch(u + "/rest/settings")).json();
+            ok(s.data.userManagement.showSetupOnFirstLoad === false, "no owner");
+            const r = await login("Correct-horse-battery-9");
+            ok(r.ok, "owner login " + r.status);
+            const cookie = r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+            const me = await (await fetch(u + "/rest/login", { headers: { cookie } })).json();
+            ok(me.data.email === "owner@example.com" && me.data.role === "global:owner", "whoami " + JSON.stringify(me.data));
+            ok((await login("Wrong-password-1")).status === 401, "wrong password accepted");
+          }
+          if (what === "webhook") {
+            const r = await fetch(u + "/webhook/ci-check");
+            const t = await r.text();
+            ok(r.ok && t.includes("Workflow was started"), "webhook " + r.status + " " + t);
+          }
+          console.log(what + ": ok");
+          JS
+          c() { podman cp /tmp/ci.mjs n8n:/tmp/ci.mjs && podman exec n8n node /tmp/ci.mjs "$1"; }
+          c wait
+          c login
+          podman exec -i n8n sh -c 'cat > /tmp/wf.json' <<'JSON'
+          {"id":"ciWebhook0000001","name":"CI webhook","nodes":[{"parameters":{"path":"ci-check","options":{}},"id":"8a0f6d0e-2c55-4c3e-9f1b-000000000001","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0],"webhookId":"8a0f6d0e-2c55-4c3e-9f1b-000000000002"}],"connections":{},"settings":{},"pinData":{}}
+          JSON
+          podman exec n8n n8n import:workflow --input=/tmp/wf.json
+          podman exec n8n n8n publish:workflow --id=ciWebhook0000001
+          systemctl restart n8n
+          c wait
+          c login
+          c webhook
+          [ "$(stat -c '%U %a' /etc/n8n/keys.env)" = "root 600" ]
+          echo "All checks passed."
+          EOF
+      - name: Plan again after the restart
+        working-directory: examples/local
+        env:
+          TF_VAR_image_repository: ghcr.io/n8n-io/n8n
+        run: conn3x plan -detailed-exitcode
+      - name: Clean up
+        if: always()
+        working-directory: examples/local
+        env:
+          PODMAN: sudo podman
+        run: ./down.sh
