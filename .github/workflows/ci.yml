@@ -132,6 +132,30 @@ jobs:
           [ "$(stat -c '%U %a' /etc/n8n/keys.env)" = "root 600" ]
           echo "All checks passed."
           EOF
+      # A second container on the host's network, with the same UID as n8n's,
+      # holds the port while n8n's container is up with nothing listening.
+      - name: Another process on the port gets no password
+        run: |
+          sudo podman exec -i circuit-n8n sh -eu <<'EOF'
+          img=$(podman inspect n8n --format '{{.ImageName}}')
+          systemctl stop n8n
+          podman rm -f n8n >/dev/null 2>&1 || true
+          podman run -d --name n8n --network host --entrypoint sleep "$img" 300 >/dev/null
+          podman run -d --name holder --network host --user 1000 --entrypoint node "$img" -e '
+            require("http").createServer((q, s) => {
+              console.log(q.method, q.url);
+              s.setHeader("content-type", "application/json");
+              s.end(JSON.stringify({ data: { userManagement: { showSetupOnFirstLoad: true } } }));
+            }).listen(5678, "127.0.0.1")' >/dev/null
+          for _ in $(seq 30); do podman exec holder node -e 'fetch("http://127.0.0.1:5678/ready").catch(() => process.exit(1))' && break; sleep 1; done
+          if out=$(podman exec -i n8n node --input-type=module -e "$(cat /etc/n8n/owner-setup.mjs)" < /etc/n8n/owner_password 2>&1); then exit 1; fi
+          printf '%s\n' "$out" | grep -q "isn't held by n8n"
+          if podman logs holder 2>&1 | grep -q POST; then exit 1; fi
+          podman rm -f holder n8n >/dev/null
+          systemctl start n8n
+          for _ in $(seq 300); do podman exec n8n node -e 'fetch("http://127.0.0.1:5678/rest/settings").then((r) => r.json()).then((j) => process.exit(j.data ? 0 : 1), () => process.exit(1))' 2>/dev/null && exit 0; sleep 1; done
+          exit 1
+          EOF
       - name: Plan again after the restart
         working-directory: examples/local
         env:
