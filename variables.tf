@@ -119,7 +119,7 @@ variable "postgres" {
     schema   = optional(string, "public")
   })
   default     = null
-  description = "PostgreSQL to keep n8n's data in, such as { host = \"db1\" }. The role and database must exist. When null, n8n uses SQLite in /var/lib/n8n."
+  description = "PostgreSQL to keep n8n's data in, such as { host = \"db1\" }. The role and database must exist. When null, n8n uses SQLite in /var/lib/n8n/data."
 
   validation {
     condition     = var.postgres == null || alltrue([for k, v in coalesce(var.postgres, {}) : can(regex("^[A-Za-z0-9_.:-]+$", tostring(v)))])

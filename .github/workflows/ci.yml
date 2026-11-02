@@ -137,6 +137,10 @@ jobs:
         env:
           TF_VAR_image_repository: ghcr.io/n8n-io/n8n
         run: conn3x plan -detailed-exitcode
+      - name: Check only root can enter the data's parent
+        run: |
+          [ "$(sudo podman exec circuit-n8n stat -c '%u %a' /var/lib/n8n)" = "0 700" ]
+          [ "$(sudo podman exec circuit-n8n stat -c '%u' /var/lib/n8n/data)" = "1000" ]
       - name: Clean up
         if: always()
         working-directory: examples/local

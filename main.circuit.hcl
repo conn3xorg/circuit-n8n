@@ -1,7 +1,7 @@
 locals {
   image     = "${var.image_repository}:${var.n8n_version}@${var.image_digest}"
   etc       = "/etc/n8n"
-  data      = "/var/lib/n8n"
+  data      = "/var/lib/n8n/data"
   keys_file = "/etc/n8n/keys.env"
 
   # [scheme, host] of public_url.
@@ -111,12 +111,21 @@ circuit "n8n" {
   }
 
   # The SQLite database, n8n's config and binary data. Podman hands it to
-  # the container's node user, UID 1000, as it starts (the :U below), so
-  # the owner isn't set here.
+  # the container's node user, UID 1000, as it starts (the :U below). That
+  # UID can be a person's account on the host, so the data sits in a parent
+  # only root can enter. Earlier versions kept it in /var/lib/n8n itself,
+  # and that directory moves down a level.
   step "data" {
-    directory {
-      path = local.data
-      mode = "0700"
+    command {
+      command = <<-EOT
+        set -e
+        systemctl stop n8n 2>/dev/null || true
+        [ -e /var/lib/n8n.move ] || [ ! -e /var/lib/n8n ] || mv /var/lib/n8n /var/lib/n8n.move
+        install -d -m 0700 /var/lib/n8n
+        [ ! -e /var/lib/n8n.move ] || mv /var/lib/n8n.move ${local.data}
+        install -d -m 0700 ${local.data}
+      EOT
+      unless  = "[ \"$(stat -c '%u %a' /var/lib/n8n)\" = '0 700' ] && [ -d ${local.data} ]"
     }
   }
 }
@@ -127,7 +136,7 @@ circuit "n8n" {
 module "podman" {
   source = "github.com/conn3xorg/circuit-podman?ref=v0.1.0"
 
-  depends_on = [conn3x_command.n8n__key, conn3x_directory.n8n__data]
+  depends_on = [conn3x_command.n8n__key, conn3x_command.n8n__data]
 
   hosts                = var.hosts
   ssh_user             = var.ssh_user
