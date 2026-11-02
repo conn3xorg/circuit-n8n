@@ -18,7 +18,7 @@ variable "owner_password" {
 }
 
 module "n8n" {
-  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.0"
+  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.1"
 
   hosts                = { automation = "192.168.1.50" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
@@ -94,7 +94,7 @@ module "postgres" {
 }
 
 module "n8n" {
-  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.0"
+  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.1"
 
   depends_on = [module.postgres]
 
@@ -139,7 +139,7 @@ On each host, in order:
 
 1. Creates `/etc/n8n`, mode `0700`, owned by root.
 2. If `/etc/n8n/keys.env` doesn't exist, writes it, mode `0600`, with `N8N_ENCRYPTION_KEY`: 24 random bytes from `/dev/urandom` in base64, the same form n8n makes for itself. Once the file exists the circuit never touches it again, so the key can't change under a running instance.
-3. Creates `/var/lib/n8n`, mode `0700`, for the SQLite database, n8n's own config and its event log.
+3. Creates `/var/lib/n8n/data`, in a parent only root can enter, for the SQLite database, n8n's own config and its event log.
 4. Through [circuit-podman](https://github.com/conn3xorg/circuit-podman) v0.1.0, installs Podman and runs `ghcr.io/n8n-io/n8n:VERSION@DIGEST` as `n8n.service`: a Quadlet unit on the host network that reads `keys.env`, mounts `/var/lib/n8n` as `/home/node/.n8n`, and carries the settings below. `postgres_password` and `environment` go to `/etc/containers/env/n8n.env`, mode `0600`, written from ephemeral values so they never reach the plan or state.
 5. Waits up to 15 minutes for n8n to open its port. On a first start it pulls the image, which is about 280 MB compressed, and sets up its database before it listens.
 6. With `owner`, writes the password and a small setup script to `/etc/n8n`, both `0600`, and creates the owner as described above.
@@ -150,7 +150,7 @@ A change to any input restarts n8n. Workflows running at that moment are cut off
 
 ### Who owns the data
 
-n8n runs in the container as its `node` user, UID 1000, and Podman hands `/var/lib/n8n` to that UID each time the container starts. On a host where UID 1000 is also a person's account, as on many desktop and Raspberry Pi installs, that account owns n8n's files. It can read n8n's database and, since n8n copies the key into `/var/lib/n8n/config`, the encryption key too. On a host with only root and service accounts, as on most servers, nobody else has that UID.
+n8n runs in the container as its `node` user, UID 1000, and Podman hands `/var/lib/n8n/data` to that UID each time the container starts. On a host where UID 1000 is also a person's account, as on many desktop and Raspberry Pi installs, that account owns n8n's files on paper, but can't reach them: only root can enter `/var/lib/n8n`. A host that ran an earlier version has its data moved there on the next apply, and n8n restarts.
 
 ### Pruning executions
 
@@ -170,7 +170,7 @@ Find the key in the old instance's `N8N_ENCRYPTION_KEY`, or in the `encryptionKe
 
 - It doesn't set up TLS or a reverse proxy. n8n speaks plain HTTP on `listen_address`.
 - It doesn't open a port in a firewall. With the default `listen_address`, nothing outside the host can reach n8n anyway.
-- It doesn't back anything up. Back up `/var/lib/n8n` or PostgreSQL (see [circuit-restic](https://github.com/conn3xorg/circuit-restic)) and `keys.env`, separately.
+- It doesn't back anything up. Back up `/var/lib/n8n/data` or PostgreSQL (see [circuit-restic](https://github.com/conn3xorg/circuit-restic)) and `keys.env`, separately.
 - It doesn't run Python in the Code node. n8n runs Python only in a separate task runner container, `n8nio/runners`, which this circuit doesn't set up. JavaScript in the Code node works.
 - It doesn't set up queue mode with Redis and workers. One n8n process does everything, which is plenty for most teams.
 - Deleting the module leaves Podman, the container, `/etc/n8n` and `/var/lib/n8n` in place.
