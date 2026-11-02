@@ -115,7 +115,7 @@ Switching an existing instance from SQLite to PostgreSQL doesn't move its data. 
 
 ### The owner account
 
-n8n's first screen asks for an owner account, and the first person to open the editor gets it. With `owner` and `owner_password` set, the apply creates the owner itself, through n8n's own setup endpoint (`POST /rest/owner/setup`), as soon as n8n is up. It sends the request from inside the container with Node, so the host needs no `curl`, and the password goes in on stdin rather than a command line.
+n8n's first screen asks for an owner account, and the first person to open the editor gets it. With `owner` and `owner_password` set, the apply creates the owner itself, through n8n's own setup endpoint (`POST /rest/owner/setup`), as soon as n8n is up. It sends the request from inside the container with Node, so the host needs no `curl`, and the password goes in on stdin rather than a command line. It's only sent when every listener on n8n's port belongs to a process in n8n's container. That narrows the window rather than closing it, since n8n could stop between the check and the send, and n8n's own port has no certificate to check.
 
 The circuit creates the owner and never changes it afterwards. If n8n already has an owner, the step says so and leaves it alone. Change the owner's name, email or password in n8n's settings; changing `owner` later does nothing to the account.
 

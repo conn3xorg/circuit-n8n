@@ -44,12 +44,31 @@ locals {
   )
 
   # Run in the n8n container by the owner step, since the host may have no
-  # curl. The password comes in on stdin, so it's in no command line.
+  # curl. The password comes in on stdin, so it's in no command line. It's only
+  # sent when every listener on the port belongs to a process in this container.
+  # A UID wouldn't do, since the container's UID 1000 can be a person's account
+  # on the host. That narrows the window, since n8n could stop between the check
+  # and the send, and n8n's own port has no certificate to close it with.
   owner_script = var.owner == null ? "" : <<-EOT
     // Written by Conn3x. Creates n8n's owner account once.
-    import { readFileSync } from "node:fs";
+    import { readdirSync, readFileSync, readlinkSync } from "node:fs";
     const owner = ${jsonencode({ email = var.owner.email, firstName = var.owner.first_name, lastName = var.owner.last_name })};
     const base = ${jsonencode(local.local_url)};
+    const held = () => {
+      const port = ":" + (${var.port}).toString(16).toUpperCase().padStart(4, "0");
+      const sockets = ["tcp", "tcp6"]
+        .flatMap((f) => readFileSync("/proc/net/" + f, "utf8").split("\n").slice(1))
+        .map((line) => line.trim().split(/\s+/))
+        .filter((c) => c[3] === "0A" && c[1].endsWith(port))
+        .map((c) => "socket:[" + c[9] + "]");
+      const ours = new Set();
+      for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
+        try {
+          for (const fd of readdirSync("/proc/" + pid + "/fd")) ours.add(readlinkSync("/proc/" + pid + "/fd/" + fd));
+        } catch {}
+      }
+      return sockets.length > 0 && sockets.every((s) => ours.has(s));
+    };
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // Until n8n's API is up, the editor's HTML answers instead of JSON.
     const read = () => fetch(base + "/rest/settings").then((r) => r.json(), () => null).catch(() => null);
@@ -64,6 +83,10 @@ locals {
     if (!settings.data.userManagement.showSetupOnFirstLoad) {
       console.log("n8n already has an owner. Leaving it as it is.");
       process.exit(0);
+    }
+    if (!held()) {
+      console.error("Port ${var.port} isn't held by n8n, so the password wasn't sent.");
+      process.exit(1);
     }
     const res = await fetch(base + "/rest/owner/setup", {
       method: "POST",
