@@ -76,6 +76,17 @@ jobs:
           conn3x init
           conn3x apply -auto-approve
           conn3x plan -detailed-exitcode
+      # The example's secrets reach the host write-only, so state holds
+      # none of them, and nothing Conn3x writes under .terraform does either.
+      # .terraform/modules is left out: it holds downloaded module code.
+      - name: Check the secrets stay out of state
+        working-directory: examples/local
+        run: |
+          test -s terraform.tfstate || { echo "No terraform.tfstate to check." >&2; exit 1; }
+          if grep -rqF --exclude-dir=modules -e Correct-horse-battery-9 terraform.tfstate .terraform/; then
+            echo "A secret from the example is in terraform.tfstate or under .terraform/." >&2
+            exit 1
+          fi
       # /healthz answers, the owner the apply created can log in and a wrong
       # password can't, and a workflow imported with the n8n CLI answers on
       # its webhook once published. n8n loads published workflows as it
