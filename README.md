@@ -20,7 +20,7 @@ variable "owner_password" {
 }
 
 module "n8n" {
-  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.1"
+  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.2"
 
   hosts                = { automation = "192.168.1.50" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
@@ -96,7 +96,7 @@ module "postgres" {
 }
 
 module "n8n" {
-  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.1"
+  source = "github.com/conn3xorg/circuit-n8n?ref=v0.1.2"
 
   depends_on = [module.postgres]
 
