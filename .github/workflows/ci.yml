@@ -82,6 +82,7 @@ jobs:
       - name: Check the secrets stay out of state
         working-directory: examples/local
         run: |
+          test -s terraform.tfstate || { echo "No terraform.tfstate to check." >&2; exit 1; }
           if grep -rqF --exclude-dir=modules -e Correct-horse-battery-9 terraform.tfstate .terraform/; then
             echo "A secret from the example is in terraform.tfstate or under .terraform/." >&2
             exit 1
