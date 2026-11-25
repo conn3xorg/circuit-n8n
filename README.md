@@ -194,8 +194,8 @@ Find the key in the old instance's `N8N_ENCRYPTION_KEY`, or in the `encryptionKe
 | `postgres_password` | string | `null` | Password of the PostgreSQL user. Needed with `postgres`. Ephemeral and sensitive, like `owner_password`. |
 | `executions_prune` | bool | `true` | Delete old execution data. Sets `EXECUTIONS_DATA_PRUNE`. |
 | `executions_max_age` | number | `336` | Hours to keep finished executions before pruning deletes them. Sets `EXECUTIONS_DATA_MAX_AGE`. |
-| `n8n_version` | string | `"2.45.6"` | Tag of n8n's image. Change `image_digest` with it. |
-| `image_digest` | string | `"sha256:45edf896..."` | Digest of the image for `n8n_version`. Podman pulls by the digest. Find it on [Docker Hub](https://hub.docker.com/r/n8nio/n8n/tags) or with `skopeo inspect docker://docker.n8n.io/n8nio/n8n:TAG`. |
+| `n8n_version` | string | `"2.49.6"` | Tag of n8n's image. Change `image_digest` with it. |
+| `image_digest` | string | `"sha256:a1a9955a..."` | Digest of the image for `n8n_version`. Podman pulls by the digest. Find it on [Docker Hub](https://hub.docker.com/r/n8nio/n8n/tags) or with `skopeo inspect docker://docker.n8n.io/n8nio/n8n:TAG`. |
 | `image_repository` | string | `"ghcr.io/n8n-io/n8n"` | Where to pull the image from. `"docker.n8n.io/n8nio/n8n"` (Docker Hub) serves the same digests. |
 | `listen_address` | string | `"127.0.0.1"` | Address n8n listens on. `"0.0.0.0"` listens on every address. |
 | `port` | number | `5678` | Port n8n listens on. |
