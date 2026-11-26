@@ -35,19 +35,19 @@ variable "ssh_become" {
 
 variable "n8n_version" {
   type        = string
-  default     = "2.49.6"
-  description = "Tag of the n8n image, such as \"2.49.6\". Change image_digest with it."
+  default     = "2.49.7"
+  description = "Tag of the n8n image, such as \"2.49.7\". Change image_digest with it."
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]*$", var.n8n_version))
-    error_message = "n8n_version must be an image tag, such as \"2.49.6\"."
+    error_message = "n8n_version must be an image tag, such as \"2.49.7\"."
   }
 }
 
 variable "image_digest" {
   type        = string
-  default     = "sha256:a1a9955a4a9e5dd9fa65a62f59e0751351b45b9e5cd2c17e6e330a8d0026cad8"
-  description = "Digest of the image for n8n_version, such as \"sha256:a1a9...\". Podman pulls by the digest, so a tag that moves upstream can't change what runs."
+  default     = "sha256:17a3e5a8c5e2a7440cc757f5392d57b50eefdfd46eac4532a7dea9bf2735d9ae"
+  description = "Digest of the image for n8n_version, such as \"sha256:17a3...\". Podman pulls by the digest, so a tag that moves upstream can't change what runs."
 
   validation {
     condition     = can(regex("^sha256:[a-f0-9]{64}$", var.image_digest))
